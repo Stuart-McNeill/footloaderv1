@@ -122,6 +122,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+    // --- CONFIG ---
+const MODELS = {
+    left: "https://stuart-mcneill.github.io/3Dfootselection/Leftfoot.glb",
+    right: "https://stuart-mcneill.github.io/feet-selection/RightFoot.glb"
+};
 // --- DATA SOURCE ---
 const PRESET_REGIONS = [
     { name: "Left foot - Dorsal Hallux Toenail", pos: [-0.111, 0.098, 0.465], rot: [0, 0, 0], scale: [0.05, 0.015, 0.05] },
