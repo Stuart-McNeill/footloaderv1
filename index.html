@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Foot Analysis - Muscle Visualization</title>
+    <title>3D Foot Analysis - Loader</title>
     <style>
         :root { --primary: #00f2ff; --bg: #0a0a0c; --panel-bg: rgba(25, 25, 30, 0.9); --border: rgba(255, 255, 255, 0.1); }
         body { margin: 0; overflow: hidden; font-family: sans-serif; background: var(--bg); color: white; }
         #ui-layer { position: absolute; top: 20px; left: 20px; z-index: 10; width: 300px; pointer-events: none; }
-        .panel { background: var(--panel-bg); backdrop-filter: blur(10px); padding: 20px; border-radius: 12px; border: 1px solid var(--border); pointer-events: auto; }
+        .panel { background: var(--panel-bg); backdrop-filter: blur(12px); padding: 20px; border-radius: 12px; border: 1px solid var(--border); pointer-events: auto; }
+        h2 { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #777; margin: 0 0 10px 0; }
         .group { display: flex; gap: 8px; margin-bottom: 12px; }
-        button { background: rgba(255,255,255,0.1); color: white; border: 1px solid var(--border); padding: 10px; border-radius: 6px; cursor: pointer; flex: 1; font-size: 12px; }
+        button { background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--border); padding: 10px; border-radius: 6px; cursor: pointer; flex: 1; font-size: 11px; }
         button.active { background: var(--primary); color: black; font-weight: bold; }
-        .action-btn { background: var(--primary); color: black; font-weight: bold; width: 100%; margin-top: 10px; }
-        #coords-display { margin-top: 10px; font-family: monospace; font-size: 11px; color: var(--primary); }
+        .action-btn { background: #fff; color: #000; font-weight: bold; width: 100%; margin-top: 8px; border: none; padding: 12px; cursor: pointer; }
+        #status-bar { margin-top: 15px; font-size: 11px; border-top: 1px solid var(--border); padding-top: 10px; }
+        #coords-display { color: var(--primary); font-family: monospace; margin-top: 5px; }
         input[type="file"] { display: none; }
     </style>
 </head>
@@ -21,22 +23,28 @@
 
 <div id="ui-layer">
     <div class="panel">
-        <h3 style="margin:0 0 10px 0; font-size: 14px;">3D FOOT SYSTEM</h3>
-        
+        <h2>Side Selection</h2>
         <div class="group">
             <button id="leftBtn" class="active">LEFT FOOT</button>
             <button id="rightBtn">RIGHT FOOT</button>
         </div>
 
+        <h2>Camera Control</h2>
         <div class="group">
-            <button id="rotateBtn" class="active">ROTATE</button>
+            <button id="rotateBtn" class="active">ORBIT</button>
             <button id="drawBtn">MARK</button>
         </div>
 
-        <button id="loadMuscleBtn" class="action-btn">LOAD COORDINATES (.txt)</button>
+        <h2>Data Management</h2>
+        <button id="loadBtn" class="action-btn">LOAD TEXT FILE (.txt)</button>
+        <button id="clearBtn" style="background:transparent; color:#ff4757; border: 1px solid #ff4757; margin-top:8px; width:100%; padding:5px; cursor:pointer;">CLEAR PATHS</button>
+        
         <input type="file" id="fileInput" accept=".txt">
         
-        <div id="coords-display">Status: Ready</div>
+        <div id="status-bar">
+            Model: <span id="model-stat">Loading...</span>
+            <div id="coords-display">Path: None Loaded</div>
+        </div>
     </div>
 </div>
 
@@ -54,7 +62,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// --- CONFIG ---
 const MODELS = {
     left: "https://stuart-mcneill.github.io/3Dfootselection/Leftfoot.glb",
     right: "https://stuart-mcneill.github.io/feet-selection/RightFoot.glb"
@@ -71,31 +78,37 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0c);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
-    camera.position.set(0, 0.4, 1);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0.5, 0.5, 1);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     document.body.appendChild(renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    const direct = new THREE.DirectionalLight(0xffffff, 2);
-    direct.position.set(1, 2, 1);
-    scene.add(ambient, direct, muscleGroup);
+    // Light Setup (Hemisphere light prevents darkness on the sides/bottom)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.5);
+    scene.add(hemiLight);
+    const directLight = new THREE.DirectionalLight(0xffffff, 2);
+    directLight.position.set(2, 2, 2);
+    scene.add(directLight);
+
+    scene.add(muscleGroup);
 
     controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
     
     loadModel(MODELS.left);
 
-    // UI Logic
-    document.getElementById('leftBtn').onclick = () => { switchSide('left'); };
-    document.getElementById('rightBtn').onclick = () => { switchSide('right'); };
+    // UI Wire-up
+    document.getElementById('leftBtn').onclick = () => switchSide('left');
+    document.getElementById('rightBtn').onclick = () => switchSide('right');
     document.getElementById('rotateBtn').onclick = () => toggleTool(false);
     document.getElementById('drawBtn').onclick = () => toggleTool(true);
+    document.getElementById('clearBtn').onclick = () => { muscleGroup.clear(); document.getElementById('coords-display').innerText = "Path: Cleared"; };
     
     const fileInput = document.getElementById('fileInput');
-    document.getElementById('loadMuscleBtn').onclick = () => fileInput.click();
+    document.getElementById('loadBtn').onclick = () => fileInput.click();
     fileInput.onchange = handleFileUpload;
 
     window.addEventListener('resize', onResize);
@@ -103,16 +116,27 @@ function init() {
 }
 
 function loadModel(url) {
+    document.getElementById('model-stat').innerText = "Loading " + currentSide + "...";
     if (currentModel) scene.remove(currentModel);
+    
     const loader = new GLTFLoader();
     loader.load(url, (gltf) => {
         currentModel = gltf.scene;
         scene.add(currentModel);
-        document.getElementById('coords-display').innerText = "Model Loaded: " + currentSide;
+        
+        // Auto-Center Fix: Ensures camera focuses on the model regardless of its offset
+        const box = new THREE.Box3().setFromObject(currentModel);
+        const center = box.getCenter(new THREE.Vector3());
+        controls.target.copy(center);
+        camera.position.set(center.x, center.y + 0.2, center.z + 0.8);
+        controls.update();
+
+        document.getElementById('model-stat').innerText = currentSide.toUpperCase() + " READY";
     });
 }
 
 function switchSide(side) {
+    if (currentSide === side) return;
     currentSide = side;
     document.getElementById('leftBtn').classList.toggle('active', side === 'left');
     document.getElementById('rightBtn').classList.toggle('active', side === 'right');
@@ -130,52 +154,39 @@ function toggleTool(drawing) {
 function handleFileUpload(e) {
     const file = e.target.files[0];
     const reader = new FileReader();
-    reader.onload = (event) => {
-        parseCoordinates(event.target.result);
-    };
+    reader.onload = (event) => parseAndVisualize(event.target.result);
     reader.readAsText(file);
 }
 
-function parseCoordinates(text) {
+function parseAndVisualize(text) {
     muscleGroup.clear();
-    
-    // Find all [x, y, z] patterns in the text
     const regex = /\[\s*([\d.-]+)\s*,\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\]/g;
     let match;
     const points = [];
-
+    
     while ((match = regex.exec(text)) !== null) {
-        points.push(new THREE.Vector3(
-            parseFloat(match[1]), 
-            parseFloat(match[2]), 
-            parseFloat(match[3])
-        ));
+        points.push(new THREE.Vector3(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])));
     }
 
     if (points.length > 0) {
-        visualizePath(points);
-        document.getElementById('coords-display').innerText = `Loaded ${points.length} points`;
+        // Line Geometry
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: 0x00f2ff, linewidth: 3 });
+        muscleGroup.add(new THREE.Line(geometry, material));
+
+        // Node Geometry
+        points.forEach(p => {
+            const dot = new THREE.Mesh(
+                new THREE.SphereGeometry(0.0025),
+                new THREE.MeshBasicMaterial({ color: 0xffffff })
+            );
+            dot.position.copy(p);
+            muscleGroup.add(dot);
+        });
+        document.getElementById('coords-display').innerText = "Path: " + points.length + " points loaded";
     } else {
-        alert("No valid coordinates found in file. Ensure format is [x, y, z]");
+        alert("Invalid file format. Ensure coordinates are in [x, y, z] brackets.");
     }
-}
-
-function visualizePath(points) {
-    // 1. Create the Line (Tendon)
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: 0x00f2ff, linewidth: 2 });
-    const line = new THREE.Line(geometry, material);
-    muscleGroup.add(line);
-
-    // 2. Create small spheres for each point
-    points.forEach(p => {
-        const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(0.003),
-            new THREE.MeshBasicMaterial({ color: 0xffffff })
-        );
-        sphere.position.copy(p);
-        muscleGroup.add(sphere);
-    });
 }
 
 function onResize() {
